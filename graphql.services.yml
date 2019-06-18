@@ -268,6 +268,17 @@ services:
     class: Drupal\graphql\GraphQLLanguageContext
     arguments: ['@language_manager']
 
+  graphql.workspace_context:
+    class: Drupal\graphql\GraphQLWorkspaceContext
+    arguments: ['@workspaces.manager']
+
+  graphql.workspace_negotiator:
+    class: Drupal\graphql\Plugin\WorkspaceNegotiation\WorkspaceNegotiationGraphQL
+    arguments: ['@graphql.workspace_context', '@plugin.manager.graphql.schema', '@cache.static']
+    tags:
+      # The priority is high to increase the chances of this negotiator being the first one to be called.
+      - { name: workspace_negotiator, priority: 1000 }
+
   graphql.config_factory_override:
     class: Drupal\graphql\Config\GraphQLConfigOverrides
     arguments: ['@config.storage', '@?plugin.manager.language_negotiation_method']

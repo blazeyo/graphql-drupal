@@ -37,6 +37,13 @@ abstract class FieldPluginBase extends PluginBase implements FieldPluginInterfac
   protected $languageContext;
 
   /**
+   * The workspace context service.
+   *
+   * @var \Drupal\graphql\GraphQLWorkspaceContext
+   */
+  protected $workspaceContext;
+
+  /**
    * The renderer service.
    *
    * @var \Drupal\Core\Render\RendererInterface
@@ -76,6 +83,19 @@ abstract class FieldPluginBase extends PluginBase implements FieldPluginInterfac
   protected function getLanguageContext() {
     if (!isset($this->languageContext)) {
       $this->languageContext = \Drupal::service('graphql.language_context');
+    }
+    return $this->languageContext;
+  }
+
+  /**
+   * Get the workspace context instance.
+   *
+   * @return \Drupal\graphql\GraphQLWorkspaceContext
+   *   The workspace context service.
+   */
+  protected function getWorkspaceContext() {
+    if (!isset($this->languageContext)) {
+      $this->languageContext = \Drupal::service('graphql.workspace_context');
     }
     return $this->languageContext;
   }
@@ -148,11 +168,25 @@ abstract class FieldPluginBase extends PluginBase implements FieldPluginInterfac
   }
 
   /**
+   * Indicator if the field is workspace aware.
+   *
+   * @return bool
+   *   The field's workspace awareness status.
+   */
+  protected function isWorkspaceAwareField() {
+    // There are no special cache tags in the workspaces module, so default
+    // to false until a better way of checking that out is found.
+    return FALSE;
+  }
+
+  /**
    * {@inheritdoc}
    */
   protected function resolveDeferred(callable $callback, $value, array $args, ResolveContext $context, ResolveInfo $info) {
     $isLanguageAware = $this->isLanguageAwareField();
     $languageContext = $this->getLanguageContext();
+    $isWorkspaceAware = $this->isWorkspaceAwareField();
+    $workspaceContext = $this->getWorkspaceContext();
 
     $renderContext = new RenderContext();
 
@@ -166,9 +200,19 @@ abstract class FieldPluginBase extends PluginBase implements FieldPluginInterfac
       });
     };
 
-    $result = $isLanguageAware
-      ? $languageContext->executeInLanguageContext($executor, $context->getContext('language', $info))
-      : $executor();
+    if ($isLanguageAware) {
+      $executor = function () use ($context, $info, $languageContext, $executor) {
+        return $languageContext->executeInLanguageContext($executor, $context->getContext('language', $info));
+      };
+    }
+
+    if ($isWorkspaceAware) {
+      $executor = function () use ($context, $info, $workspaceContext, $executor) {
+        return $workspaceContext->executeInWorkspaceContext($executor, $context->getContext('workspace', $info));
+      };
+    }
+
+    $result = $executor();
 
     if (!$renderContext->isEmpty() && $info->operation->operation === 'query') {
       $context->addCacheableDependency($renderContext->pop());
